@@ -27,7 +27,7 @@ class consulta() :
             self.c.connection.commit()
             r = self.c.cursor.fetchall()
             return r
-        except pymysql.Error as e:
+        except pymysql.Error as e: 
             print("Error:", e)
         finally:
             if hasattr(self, 'c'):
@@ -70,9 +70,6 @@ class main:
             tipo_moneda = 152 #moneda USD
             if fila.ID_CMONEDA == tipo_moneda :
                 subtotal = self.conversion(subtotal)
-                
-            
-
 
 
     def procentaje(self, porcentaje, subtotal):
