@@ -6,7 +6,10 @@ from Models.opModel import opModel
 from Models.CuentasCobrar import ModelFacturasCobrar , CuentasPorCobrar 
 from Models.modelHorras import ModelHoras
 from datetime import timedelta
-
+from Models.CuentrasPagar import ModelFacturasPagar, CuentasPorpagar
+from Models.produccion import Produccion
+from excel import ExcelGenerator
+from Models.Insumos import  InsumosTotal
 
 class main ():
     def __init__(self) -> None:
@@ -17,15 +20,35 @@ class main ():
             self.pantalla_limpia = 'clear'
         self.pantalla_limpia = 'cls'   
 
-    def procentaje(self, cantidad, subtotal):
-        x = (cantidad * 100) / subtotal 
-        return x
+    def porcentaje(self, cantidad, subtotal):
+        '''
+            Calcula el porcentaje de una cantidad con respecto a un subtotal.
+
+            Args:
+                cantidad (float): La cantidad para la cual se calculará el porcentaje.
+                subtotal (float): El subtotal con respecto al cual se calculará el porcentaje.
+
+            Returns:
+                float: El porcentaje calculado. Si el subtotal es cero, retorna 0.
+        ''' 
+        if subtotal != 0:
+            porcentaje = (cantidad * 100) / subtotal
+            return porcentaje
+        else:
+            # Evitar la división por cero, retorna 0 si el subtotal es cero
+            return 0
      
     def main(self):
         self.modelOp = opModel()
         self.modelCobrar = ModelFacturasCobrar()
+        self.modelPagar = ModelFacturasPagar()
         self.ModelFacturas = CuentasPorCobrar()
+        self.ModelFacturasPagar = CuentasPorpagar()
         self.modelHoras = ModelHoras()
+        self.produccion = Produccion()
+        self.excel = ExcelGenerator()
+        self.insumos = InsumosTotal()
+
         while True:
             try:
                 os.system(self.pantalla_limpia)
@@ -33,6 +56,7 @@ class main ():
                 print(Fore.WHITE + ". . : :RESUMEN DE UTILIDAD DE OPS: : . .\n")
                 print(f"1. RESUMEN OP")
                 print("2. POCENTAJE POR OP")
+                print("3. Imprimir op")
                 print(f"9. SALIR")
                 numero = int(input("\nElige una opcion...\n"))
 
@@ -49,32 +73,52 @@ class main ():
 
                     print(Fore.WHITE +"------------Productos ---------")
                     productos = self.modelOp.ConsultaProductos(op_folio)
-                    for producto in  productos :
+                    for producto in  productos : 
                         print(Fore.GREEN +producto[0])
                     
                     print(Fore.WHITE +"------Productos Facturados-----")
-                    productosFacturados = self.modelCobrar.facturasCobraroP(op_folio)
+                    productosFacturados, json = self.modelCobrar.facturasCobraroP(op_folio)
                     for producto in  productosFacturados :
-                        if producto[2] == 'E':
+                        if producto[2] == 'I':
                             print(Fore.WHITE +str( producto[5]))
                             print(Fore.WHITE +"Cantidad: "+Fore.GREEN + str(producto[6]))
                             print(Fore.WHITE +"Precio unitario: "+Fore.GREEN + str(producto[7]))
                             print(Fore.WHITE +"Subtotal : "+Fore.GREEN + str(producto[8]))
                             print("")
-                        elif producto[2] == 'NC':
+                        elif producto[2] == 'NC': #ACOMODAR
                             print("Nota credito:")
                             print(Fore.WHITE +str(producto[5]))
                             print("")
 
                     print(Fore.WHITE +"------------Gastos---------")
-                    print("")
+                    datos_pagar, jsonPagar =  self.modelPagar.facturasPagarDetalles(op_folio)
+                    for producto in  datos_pagar :
+                        if producto[6] == 'I':
+                            print(Fore.WHITE +str( producto[1]))
+                            print(Fore.WHITE +"Precio : "+Fore.GREEN + str(producto[3]))
+                            print(Fore.WHITE +"Cuenta : "+Fore.GREEN + str(producto[4]))
+                            print(Fore.WHITE +"Gastos : "+Fore.GREEN + str(producto[5]))
 
+                            print("")
+                        elif producto[6] == 'NC':
+                            print("Nota credito:")
+                            print(Fore.WHITE +str(producto[5]))
+                            print("")
+
+                    ajustes, maquila, produccion  = self.produccion.totalProduccion(op_folio)                    
+                    print("Ajustes : $",ajustes)
+                    print("Maquila : $",maquila)
+                    print("Produccion: $",produccion)
                     print(Fore.WHITE +"-----------Utilidad--------")
-                    FacturasCobro = self.ModelFacturas.totalFacturasCobro(op_folio)
-                    FacturasPago = 0
-                    utilidad = FacturasCobro-FacturasPago
+                    total_insumos =  self.insumos.totalInsumos(op_folio)
+                    FacturasCobro = 16529 #self.ModelFacturas.totalFacturasCobro(op_folio)
+                    FacturasPago = self.ModelFacturasPagar.totalFacturas(op_folio)
+                    utilidad = FacturasCobro - (FacturasPago + int(total_insumos) + int(ajustes) + int(maquila) + int(produccion))
+                    print("Faturas cobro $" + str(FacturasCobro))
+                    print("Facturas pago $" + str(FacturasPago))
+                    print("Insumos $" + str(total_insumos))
                     print("Subtotal: $"+ str(utilidad))
-                    print("Porcentaje utilidad: "+str(self.procentaje(utilidad,FacturasCobro))+"%")
+                    print("Porcentaje utilidad: "+str(self.porcentaje(utilidad,FacturasCobro))+"%")
                     
                 elif numero ==2:
                     hora_inicio = '2023-09-01'
@@ -90,6 +134,14 @@ class main ():
                         print("op: ",total_hora[1], "porcentaje: ",porcentaje,"%")
                         suma+=porcentaje
                     print(suma,"%")
+                
+                elif numero == 3:
+                    op_folio = str(input("INGRESA EL FOLIO DE LA OP: "))
+                    print("--------------------------------------")
+                    self.excel.crear_excel_desde_mysql(op_folio)
+                    print(Fore.GREEN + "Generada correctamente")
+                    print(Fore.WHITE +"--------------------------------------")
+                    
                 elif numero == 9:
                     os.system(self.pantalla_limpia)
                     print("\nA D I O S\n")

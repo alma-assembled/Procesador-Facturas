@@ -1,38 +1,63 @@
-import connection as cn
+import Models.connection as cn
 import pymysql
+import json
+import decimal
 
-class consulta() :
-    def datos(self):
+class ModelFacturasPagar() :
+    def facturasPagarDetalles(self,folioOp):
         self.c = cn.DataBase()
         try:
-            x='''
-                SELECT  
-                        OPCXP.ID_BOP,
-                        OPCXP.ID_BCONCEPTOCXP,
-                        OPCXP.PORCENTAJE, 
-                        CXP.SUBTOTAL,
-                        FCXP.ESTATUS, 
-                        FCXP.ID_CMONEDA
-                FROM     OPS.Base_ConceptosCxP CXP,
-                        OPS.Base_ConceptosOPsCxP OPCXP,
-                        OPS.Base_FacturasCxP  FCXP
-                WHERE  OPCXP.ACTIVO = 1
-                AND CXP.ACTIVO = 1
-                AND FCXP.ACTIVO = 1
-                AND OPCXP.ID_BOP = 852  
-                AND OPCXP.ID_BCONCEPTOCXP = CXP.ID_BCONCEPTOCXP
-                AND CXP.ID_BFACTURACXP = FCXP.ID_BFACTURACXP;
+            x=f'''
+            SELECT  
+                    FCXP.ID_BFACTURACXP,
+                    CXP.DESCRIPCION,
+                    OPCXP.PORCENTAJE, 
+                    CXP.PRECIO,
+                    CC.CUENTA,
+                    CG.GASTO,
+                    FCXP.TIPO_COMPROBANTE,
+                    BOP.FOLIO AS OP_FOLIO
+            FROM     OPS.Base_ConceptosCxP CXP,
+                    OPS.Base_ConceptosOPsCxP OPCXP,
+                    OPS.Base_FacturasCxP  FCXP,
+                    OPS.Base_OP BOP,
+                    OPS.Catalogo_Gastos CG,
+                    OPS.Catalogo_CuentasContables CC
+            WHERE  OPCXP.ACTIVO = 1
+            AND CXP.ACTIVO = 1
+            AND FCXP.ACTIVO = 1
+            AND BOP.FOLIO = {folioOp}
+            AND BOP.ID_BOP =  OPCXP.ID_BOP
+            AND OPCXP.ID_BCONCEPTOCXP = CXP.ID_BCONCEPTOCXP
+            AND CXP.ID_BFACTURACXP = FCXP.ID_BFACTURACXP
+            AND OPCXP.ID_CGASTO = CG.ID_CGASTO
+            AND CXP.ID_CCUENTACONTABLE = CC.ID_CCUENTACONTABLE;
             '''
             self.c.cursor.execute(x)
             self.c.connection.commit()
             r = self.c.cursor.fetchall()
-            return r
+
+            columnas = [columna[0] for columna in self.c.cursor.description]
+
+            # Convertir los resultados a una lista de diccionarios
+            datos_json = [dict(zip(columnas, fila)) for fila in r]
+
+            # Convertir la lista de diccionarios a formato JSON
+            json_resultado = json.dumps(datos_json, indent=2, default=self.decimal_default)
+
+            return r, json_resultado
         except pymysql.Error as e: 
             print("Error:", e)
         finally:
             if hasattr(self, 'c'):
                 self.c.connection.close()
 
+    def decimal_default(self, obj):
+        # Función de conversión personalizada para manejar Decimales
+        if isinstance(obj, decimal.Decimal):
+            return float(obj)
+        raise TypeError
+          
     def tipoCambio(self):
         self.c = cn.DataBase()
         try:
@@ -55,23 +80,22 @@ class consulta() :
                 self.c.connection.close()
 
 
-class main:
+class CuentasPorpagar(): 
 
     def __init__(self):
-        self.model= consulta()
+        self.model= ModelFacturasPagar()
 
-    def totalFacturas(self):
-
-        list = self.model.datos()
-        total_normales = 0  
+    def totalFacturas(self, op):
+        list,  json = self.model.facturasPagarDetalles(op)
+        total_normales = 0 
+        subtotal = 0 
         for fila in list:
-            if fila.estatus == 'N':
-              subtotal = self.procentaje(100, 5000)  
+            if fila[6] == 'I':
+              subtotal += fila[3] #self.procentaje(fila[2], fila[3])  
             tipo_moneda = 152 #moneda USD
-            if fila.ID_CMONEDA == tipo_moneda :
+            if 102 == tipo_moneda :
                 subtotal = self.conversion(subtotal)
-
-
+        return subtotal
     def procentaje(self, porcentaje, subtotal):
         x = (subtotal * porcentaje) / 100 
         return x
